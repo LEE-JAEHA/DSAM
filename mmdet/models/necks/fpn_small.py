@@ -6,6 +6,10 @@ from torch.nn.modules import activation
 
 from ..builder import NECKS
 import torch
+####
+# Make DSAM Module
+####
+
 class Bottleneck_Small(nn.Module):
     """Bottleneck block for DilatedEncoder used in 
 
@@ -49,6 +53,7 @@ class DSAM_BLOCK(nn.Module):
                  dilation,
                  norm_cfg=dict(type='BN', requires_grad=True)):
         super(DSAM_BLOCK, self).__init__()        
+        self.conv1X1 = ConvModule(in_channels,in_channels,1,norm_cfg=norm_cfg)
         self.DB_BLOCK1 = Bottleneck_Small(in_channels,in_channels//4,dilation=1)
         self.DB_BLOCK2 = Bottleneck_Small(in_channels,in_channels//4,dilation=2)
         self.DB_BLOCK3 = Bottleneck_Small(in_channels,in_channels//4,dilation=3)
@@ -56,27 +61,22 @@ class DSAM_BLOCK(nn.Module):
             nn.AdaptiveAvgPool2d(1),
             ConvModule(in_channels,in_channels,1,norm_cfg=norm_cfg)
         )
-        self.DimReduce =ConvModule(in_channels*4,in_channels,1,norm_cfg=norm_cfg)
-        
-
-         
-        
-        
-
-        
+        self.DimReduce =ConvModule(in_channels*5,in_channels,1,norm_cfg=norm_cfg)        
+        self.relu = nn.ReLU(inplace=True)
         
     def forward(self, x):
         identity = x
+        resBlock = self.conv1X1(x)
         DBD1 = self.DB_BLOCK1(x)
         DBD2 = self.DB_BLOCK2(x)
         DBD3 = self.DB_BLOCK3(x)
         GAP  = self.GAP(x)
         
         WHGAP = F.interpolate(GAP,size=(x.shape[2],x.shape[3]),mode="bilinear")
-        activation_map = torch.cat([DBD1,DBD2,DBD3,WHGAP],dim=1)
+        activation_map = torch.cat([resBlock,DBD1,DBD2,DBD3,WHGAP],dim=1)
 
         out = self.DimReduce(activation_map)
-        
+        out = self.relu(out)
         # out = out + identity
         return out
 
